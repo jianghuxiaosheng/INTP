@@ -880,18 +880,40 @@ function intpThumb($widget) {
 
 /* ==================== 阅读量与点赞 ==================== */
 
-/** 计数字段自增（upsert 到 typecho_fields，字段名白名单） */
+/** 按当前数据库驱动给表名加标识符引号（MySQL 反引号 / SQLite、Pgsql 双引号） */
+function intpQuoteTable($name) {
+    $db = \Typecho\Db::get();
+    return $db->getAdapter()->quoteColumn($db->getPrefix() . $name);
+}
+
+/**
+ * 计数字段自增（upsert 到 typecho_fields，字段名白名单）
+ *
+ * 三种官方支持的数据库均以 (cid, name) 唯一约束（MySQL/Pgsql 主键，
+ * SQLite 唯一索引）做单条原子 UPSERT，避免「读-改-写」在并发下丢失更新：
+ * - MySQL/MariaDB：INSERT ... ON DUPLICATE KEY UPDATE
+ * - SQLite >= 3.24 / PostgreSQL：标准 SQL:2016 的 INSERT ... ON CONFLICT DO UPDATE
+ */
 function intpCounterBump($cid, $name) {
     static $allowed = array('intp_views' => 1, 'intp_likes' => 1);
     if (!isset($allowed[$name])) {
         return;
     }
     $db = \Typecho\Db::get();
-    $table = '`' . $db->getPrefix() . 'fields`';
-    $sql = 'INSERT INTO ' . $table . ' (cid, name, type, int_value) VALUES ('
-        . (int)$cid . ', ' . $db->getAdapter()->quoteValue($name) . ', ' . $db->getAdapter()->quoteValue('int')
-        . ', 1) ON DUPLICATE KEY UPDATE int_value = int_value + 1';
-    $db->query($sql);
+    $adapter = $db->getAdapter();
+    $table = intpQuoteTable('fields');
+    $values = (int)$cid . ', ' . $adapter->quoteValue($name)
+        . ', ' . $adapter->quoteValue('int') . ', 1';
+
+    if ('mysql' === $adapter->getDriver()) {
+        $sql = 'INSERT INTO ' . $table . ' (cid, name, type, int_value) VALUES (' . $values
+            . ') ON DUPLICATE KEY UPDATE int_value = int_value + 1';
+    } else {
+        // SQLite 与 PostgreSQL 共用标准 ON CONFLICT 语法
+        $sql = 'INSERT INTO ' . $table . ' (cid, name, type, int_value) VALUES (' . $values
+            . ') ON CONFLICT (cid, name) DO UPDATE SET int_value = int_value + 1';
+    }
+    $db->query($sql, \Typecho\Db::WRITE);
 }
 
 /** 读取计数字段当前值 */
@@ -1116,8 +1138,8 @@ function intpHandleRegister() {
 function intpPopularPosts($limit = 5) {
     $db = \Typecho\Db::get();
     $options = \Typecho\Widget::widget('Widget_Options');
-    $contents = '`' . $db->getPrefix() . 'contents`';
-    $fields = '`' . $db->getPrefix() . 'fields`';
+    $contents = intpQuoteTable('contents');
+    $fields = intpQuoteTable('fields');
     $sql = 'SELECT c.cid, c.title, c.slug, c.type, c.created, COALESCE(f.int_value, 0) AS views'
         . ' FROM ' . $contents . ' c'
         . ' LEFT JOIN ' . $fields . " f ON f.cid = c.cid AND f.name = 'intp_views'"
@@ -1308,8 +1330,8 @@ function intpStickyPosts() {
     }
 
     $db = \Typecho\Db::get();
-    $contents = '`' . $db->getPrefix() . 'contents`';
-    $fields = '`' . $db->getPrefix() . 'fields`';
+    $contents = intpQuoteTable('contents');
+    $fields = intpQuoteTable('fields');
     $sql = 'SELECT c.cid, c.title, c.slug, c.type, c.created, c.text,'
         . ' (SELECT f.str_value FROM ' . $fields . ' f WHERE f.cid = c.cid AND f.name = ' . $db->getAdapter()->quoteValue('thumb') . ' LIMIT 1) AS thumb'
         . ' FROM ' . $contents . ' c'

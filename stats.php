@@ -18,9 +18,10 @@ if (preg_match('/^\d{4}$/', $since)) {
 }
 $runDays = max(1, (int)floor((time() - strtotime($since)) / 86400) + 1);
 
-/* 全部文章总字数（按字符计） */
+/* 全部文章总字数（按字符计；SQLite 无 CHAR_LENGTH，用 LENGTH，其对文本返回字符数） */
 $db = \Typecho\Db::get();
-$totalWords = (int)$db->fetchObject($db->select(array('SUM(CHAR_LENGTH(text))' => 'n'))
+$lengthExpr = 'sqlite' === $db->getAdapter()->getDriver() ? 'LENGTH(text)' : 'CHAR_LENGTH(text)';
+$totalWords = (int)$db->fetchObject($db->select(array('SUM(' . $lengthExpr . ')' => 'n'))
     ->from('table.contents')->where('type = ?', 'post')->where('status = ?', 'publish'))->n;
 
 $cards = array(
