@@ -102,6 +102,19 @@
 
 ## 更新日志
 
+### 1.2.0
+
+- 首页、搜索结果、分类 / 标签 / 作者 / 日期归档以及时间轴归档页的文章均显示阅读量（时间轴使用单条批量查询，不增加数据库负担），随主题选项「显示阅读量」统一开关
+- 修复列表分页中「上一页 / 下一页」箭头与相邻数字页码指向同一页造成的重复链接
+- 修复分页 `<ol>` 缺少列表样式重置，导致浏览器默认数字序号与页码叠显的问题
+- README 补充完整短代码文档（评论可见、提示框、折叠面板、选项卡、进度条、按钮 / 徽章、分栏）
+
+### 1.1.0
+
+- 后台侧边栏组件支持拖拽排序，松手自动保存；支持键盘 ↑ / ↓ 排序与一键恢复默认顺序
+- 移除渲染阻塞的 Google Fonts 与 Tailwind Play CDN，highlight.js 改为本地托管，Service Worker 升级至 v2
+- 修复 SQLite 下点赞后文章页 `Database Query Error` 的问题，统计查询全面兼容 MySQL / PostgreSQL / SQLite
+
 ### 1.0.1
 
 - 修复 SQLite / PostgreSQL 下点赞与阅读量自增报 `Database Query Error` 的问题：原实现使用了 MySQL 专有的 `INSERT ... ON DUPLICATE KEY UPDATE` 语法
