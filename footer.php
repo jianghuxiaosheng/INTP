@@ -12,8 +12,10 @@
   <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M24 40V10M10 24l14-14 14 14" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
 
-<!-- 代码高亮 highlight.js（highlight.min.js 11.x 已内置全部 common 常用语言，无需额外加载 languages/common.min.js） -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<!-- 代码高亮 highlight.js（仅文章/独立页面加载，本地托管；11.x common 版已内置常用语言） -->
+<?php if ($this->is('post') || $this->is('page')): ?>
+<script src="<?php $this->options->themeUrl('assets/vendor/hljs/highlight.min.js'); ?>"></script>
+<?php endif; ?>
 <script src="<?php $this->options->themeUrl('assets/js/main.js'); ?>"></script>
 <?php if ('0' !== (string)$this->options->show_sw): ?>
 <script>

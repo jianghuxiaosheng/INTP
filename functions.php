@@ -250,7 +250,7 @@ function intpSideBlogCard() {
     echo '</div></div>';
     $githubUrl = intpScUrl($opts->github_url);
     if ('' !== $githubUrl) {
-        echo '<div class="mt-3"><a class="post-more" href="' . intpScH($githubUrl)
+        echo '<div style="margin-top:0.75rem"><a class="post-more" href="' . intpScH($githubUrl)
             . '" rel="external nofollow" target="_blank">'
             . '<svg width="15" height="15" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;margin-right:4px" aria-hidden="true"><path d="M24 8a16 16 0 0 0-5.06 31.18c.8.15 1.1-.35 1.1-.77v-2.7c-4.47.97-5.42-2.16-5.42-2.16-.73-1.86-1.78-2.36-1.78-2.36-1.46-1 .1-.97.1-.97 1.6.1 2.45 1.66 2.45 1.66 1.43 2.45 3.75 1.74 4.66 1.33.14-1.04.56-1.74 1.02-2.14-3.56-.4-7.3-1.78-7.3-7.92 0-1.75.63-3.18 1.66-4.3-.17-.4-.72-2.03.16-4.24 0 0 1.35-.43 4.42 1.64a15.4 15.4 0 0 1 8.05 0c3.07-2.07 4.42-1.64 4.42-1.64.88 2.21.33 3.84.16 4.24 1.03 1.12 1.66 2.55 1.66 4.3 0 6.16-3.75 7.51-7.32 7.9.57.5 1.08 1.47 1.08 2.97v4.4c0 .43.3.93 1.1.77A16 16 0 0 0 24 8Z" fill="currentColor"/></svg>GitHub</a></div>';
     }

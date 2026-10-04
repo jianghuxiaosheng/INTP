@@ -17,36 +17,12 @@
 <link rel="alternate" type="application/rss+xml" title="RSS 2.0" href="<?php $this->options->feedUrl(); ?>">
 <link rel="alternate" type="application/atom+xml" title="Atom 0.3" href="<?php $this->options->feedUrl('/atom/'); ?>">
 
-<!-- 字体 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-
-<!-- Tailwind CSS（Play CDN；生产环境建议构建为本地 CSS 后替换） -->
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          brand: { DEFAULT: '#1b6ef3', deep: '#003061', soft: '#e4edff' },
-          surface: '#fafbfd',
-          ink:    { DEFAULT: '#1a1c1e', soft: '#5b6068' },
-          line:   '#e4e6ea',
-        },
-        fontFamily: {
-          sans: ['Roboto', 'Noto Sans SC', '-apple-system', 'BlinkMacSystemFont', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
-          mono: ['Roboto Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
-        },
-      },
-    },
-  };
-</script>
-
 <link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/style.css'); ?>">
 
-<!-- 代码高亮 highlight.js（暗色主题） -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<?php if ($this->is('post') || $this->is('page')): ?>
+<!-- 代码高亮 highlight.js（仅文章/独立页面加载，本地托管） -->
+<link rel="stylesheet" href="<?php $this->options->themeUrl('assets/vendor/hljs/github-dark.min.css'); ?>">
+<?php endif; ?>
 
 <?php $this->header('rss2=&rss1=&atom='); ?>
 <?php intpSeoExtra($this); ?>

@@ -7,7 +7,7 @@ header('Content-Type: application/javascript; charset=utf-8');
 header('Service-Worker-Allowed: /');
 header('Cache-Control: no-cache');
 ?>/* INTP theme Service Worker */
-var CACHE = 'intp-sw-v1';
+var CACHE = 'intp-sw-v2';
 var OFFLINE_URL = '/';
 
 self.addEventListener('install', function (event) {
