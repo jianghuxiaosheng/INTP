@@ -2,7 +2,7 @@
 
 极简双栏 Typecho 主题：侧边栏可左可右，Tailwind CSS + shadcn-ui 风格，IconPark 图标，代码高亮，时间轴归档。
 
-![首页](screenshots/home.png)
+![INTP 主题预览](screenshot.png)
 
 ## 特性
 
