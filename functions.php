@@ -1864,6 +1864,7 @@ function intpStickyPosts() {
 
 /* ==================== 短代码与隐藏内容（移植自 MfThemePlugin） ==================== */
 
+\Typecho\Plugin::factory('Widget_Abstract_Contents')->markdown = 'intpMarkdownProtect';
 \Typecho\Plugin::factory('Widget_Abstract_Contents')->contentEx = 'intpContentFilter';
 \Typecho\Plugin::factory('Widget_Abstract_Comments')->contentEx = 'intpCommentFilter';
 \Typecho\Plugin::factory('Widget\Feedback')->finishComment = 'intpIssueCommentToken';
@@ -1966,6 +1967,64 @@ function intpScClean($content) {
     return preg_replace('#^\s*(?:<br\s*/?>\s*)*|(?:\s*<br\s*/?>\s*)*$#i', '', $content);
 }
 
+/**
+ * 清理短代码内部由 Markdown/AutoP 产生的畸形标签
+ * - 首尾多余的 <br> 与空白
+ * - 孤立多余的 </p>（删除）、结尾未闭合的 <p>（删除起始标签）
+ * pre/code 内内容受保护，不参与配对
+ */
+function intpScBalanceHtml($content) {
+    $content = intpScClean($content);
+    if (false === stripos($content, '<p') && false === stripos($content, '</p')) {
+        return $content;
+    }
+
+    $blocks = array();
+    $protected = preg_replace_callback(
+        '#(<pre\b[^>]*>.*?</pre>|<code\b[^>]*>.*?</code>)#is',
+        function ($m) use (&$blocks) {
+            $key = "\x1aINTPBLK" . count($blocks) . "x\x1a";
+            $blocks[$key] = $m[1];
+            return $key;
+        },
+        $content
+    );
+
+    if (preg_match_all('/<p(?:\s[^>]*)?>|<\/p>/i', $protected, $mm, PREG_OFFSET_CAPTURE)) {
+        $stack = array();
+        $deletes = array();
+        foreach ($mm[0] as $token) {
+            $tag = $token[0];
+            $pos = $token[1];
+            if ('</p>' === strtolower($tag)) {
+                if (empty($stack)) {
+                    $deletes[] = array($pos, $pos + strlen($tag)); // 没有对应起始标签
+                } else {
+                    array_pop($stack);
+                }
+            } else {
+                $stack[] = array($pos, $pos + strlen($tag));
+            }
+        }
+        foreach ($stack as $open) {
+            $deletes[] = $open; // 结尾仍未闭合的起始 <p>
+        }
+        if ($deletes) {
+            usort($deletes, function ($a, $b) { return $a[0] - $b[0]; });
+            $out = '';
+            $last = 0;
+            foreach ($deletes as $range) {
+                $out .= substr($protected, $last, $range[0] - $last);
+                $last = $range[1];
+            }
+            $protected = $out . substr($protected, $last);
+        }
+    }
+
+    $content = str_replace(array_keys($blocks), array_values($blocks), $protected);
+    return intpScClean($content);
+}
+
 /** 判断当前请求是否为 RSS / Feed */
 function intpIsFeed() {
     static $isFeed = null;
@@ -1974,6 +2033,28 @@ function intpIsFeed() {
         $isFeed = (is_string($path) && preg_match('#^/feed#', $path));
     }
     return $isFeed;
+}
+
+/**
+ * Markdown 转换前保护短代码
+ *
+ * 空内容短代码（如 [progress value="60"][/progress]）中相邻的 ][ 会被
+ * Markdown 解析器当作引用式链接 [text][ref]，方括号被吞而无法渲染。
+ * 转换前将短代码标签的方括号替换为占位符，转换后还原。
+ */
+function intpMarkdownProtect($text) {
+    $tags = implode('|', intpScTags());
+    $lb = 'xINTPLB7q2x';
+    $rb = 'xINTPRB7q2x';
+    $protected = preg_replace_callback(
+        '/\[(\/?(?:' . $tags . ')\b[^\]]*)\]/i',
+        function ($m) use ($lb, $rb) {
+            return $lb . $m[1] . $rb;
+        },
+        (string)$text
+    );
+    $html = \Utils\Markdown::convert($protected);
+    return str_replace(array($lb, $rb), array('[', ']'), $html);
 }
 
 /* ---------- 文章内容钩子：Feed 转纯文本，前台渲染短代码 ---------- */
@@ -2245,6 +2326,13 @@ function intpScRender($content, $widget) {
         $content
     );
 
+    // 清理相邻块级短代码之间被 AutoP 插入的 <br>（避免成为 flex 子项等杂质）
+    $content = preg_replace(
+        '#(</(?:div|details|section)>)\s*(?:<br\s*/?>\s*)+(<(?:div|details|section)\b[^>]*\bclass="sc-[^"]*"[^>]*>)#is',
+        '$1$2',
+        $content
+    );
+
     // 图片懒加载（列表全文模式同样生效）
     $content = intpLazyImages($content);
 
@@ -2267,13 +2355,13 @@ function intpScRenderTag($tag, $attrs, $inner, $canViewHide) {
             $title = !empty($attrs['title'])
                 ? '<div class="sc-alert-title">' . intpScH($attrs['title']) . '</div>' : '';
             return '<div class="sc-alert sc-alert-' . $type . '">' . $title
-                . '<div class="sc-alert-body">' . intpScClean($inner) . '</div></div>';
+                . '<div class="sc-alert-body">' . intpScBalanceHtml($inner) . '</div></div>';
 
         case 'collapse':
             $title = !empty($attrs['title']) ? $attrs['title'] : '点击展开 / 收起';
             $open = !empty($attrs['open']) ? ' open' : '';
             return '<details class="sc-collapse"' . $open . '><summary>' . intpScH($title) . '</summary>'
-                . '<div class="sc-collapse-body">' . intpScClean($inner) . '</div></details>';
+                . '<div class="sc-collapse-body">' . intpScBalanceHtml($inner) . '</div></details>';
 
         case 'progress':
             if (isset($attrs['value'])) {
@@ -2301,7 +2389,7 @@ function intpScRenderTag($tag, $attrs, $inner, $canViewHide) {
         case 'tab':
             $title = !empty($attrs['title']) ? $attrs['title'] : 'Tab';
             return '<section class="sc-tab-panel sc-tab-alone"><h4 class="sc-tab-title">'
-                . intpScH($title) . '</h4>' . intpScClean($inner) . '</section>';
+                . intpScH($title) . '</h4>' . intpScBalanceHtml($inner) . '</section>';
 
         case 'button':
         case 'badge':
@@ -2313,15 +2401,21 @@ function intpScRenderTag($tag, $attrs, $inner, $canViewHide) {
         case 'col':
             $style = '';
             if (!empty($attrs['width'])) {
-                $style = ' style="flex-basis:' . intpScH($attrs['width']) . '"';
+                $width = trim($attrs['width']);
+                if (preg_match('/^([\d.]+)%$/', $width, $wm)) {
+                    // 百分比用 flex-grow 按比例分配，basis 为 0 才能保证含 gap 时同一行不换行
+                    $style = ' style="flex-grow:' . (float)$wm[1] . ';flex-basis:0"';
+                } else {
+                    $style = ' style="flex-basis:' . intpScH($width) . '"';
+                }
             }
-            return '<div class="sc-col"' . $style . '>' . intpScClean($inner) . '</div>';
+            return '<div class="sc-col"' . $style . '>' . intpScBalanceHtml($inner) . '</div>';
 
         case 'hide':
             if ($canViewHide) {
                 return '<div class="sc-hide is-unlocked">'
                     . '<div class="sc-hide-head">' . intpScLockSvg() . '<span>隐藏内容</span></div>'
-                    . '<div class="sc-hide-body">' . intpScClean($inner) . '</div></div>';
+                    . '<div class="sc-hide-body">' . intpScBalanceHtml($inner) . '</div></div>';
             }
             return '<div class="sc-hide is-locked">' . intpScLockSvg()
                 . '<p>以下为隐藏内容，<a href="#comments">发表评论</a>并通过审核后刷新即可查看。</p></div>';
@@ -2334,10 +2428,9 @@ function intpScRenderTag($tag, $attrs, $inner, $canViewHide) {
 function intpScRenderLink($tag, $attrs, $inner) {
     $url = isset($attrs['url']) ? intpScUrl($attrs['url']) : '';
     $variantName = isset($attrs['type']) ? preg_replace('/[^a-z]/i', '', strtolower($attrs['type'])) : '';
-    $variant = '' !== $variantName ? ' sc-' . $tag . '-' . $variantName : '';
 
     if ('button' === $tag) {
-        $class = 'sc-btn' . $variant;
+        $class = 'sc-btn' . ('' !== $variantName ? ' sc-btn-' . $variantName : '');
         if ($url) {
             $target = (isset($attrs['target']) && '_self' === $attrs['target']) ? ''
                 : ' target="_blank" rel="noopener noreferrer"';
@@ -2346,7 +2439,7 @@ function intpScRenderLink($tag, $attrs, $inner) {
         return '<span class="' . $class . '">' . $inner . '</span>';
     }
 
-    $class = 'sc-badge' . $variant;
+    $class = 'sc-badge' . ('' !== $variantName ? ' sc-badge-' . $variantName : '');
     if ($url) {
         return '<a class="' . $class . '" href="' . intpScH($url) . '" target="_blank" rel="noopener noreferrer">'
             . $inner . '</a>';
@@ -2369,7 +2462,7 @@ function intpScRenderTabs($inner) {
         $nav .= '<button type="button" class="sc-tab-link' . $active . '" data-index="' . $i
             . '" role="tab">' . intpScH($title) . '</button>';
         $panels .= '<section class="sc-tab-panel' . $active . '" role="tabpanel">'
-            . intpScClean($tab[2]) . '</section>';
+            . intpScBalanceHtml($tab[2]) . '</section>';
     }
 
     return '<div class="sc-tabs"><div class="sc-tabs-nav" role="tablist">' . $nav . '</div>'

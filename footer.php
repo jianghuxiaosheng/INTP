@@ -14,9 +14,9 @@
 
 <!-- 代码高亮 highlight.js（仅文章/独立页面加载，本地托管；11.x common 版已内置常用语言） -->
 <?php if ($this->is('post') || $this->is('page')): ?>
-<script src="<?php $this->options->themeUrl('assets/vendor/hljs/highlight.min.js'); ?>"></script>
+<script src="<?php $this->options->themeUrl('assets/vendor/hljs/highlight.min.js'); ?>?v=<?php echo filemtime(__DIR__ . '/assets/vendor/hljs/highlight.min.js'); ?>"></script>
 <?php endif; ?>
-<script src="<?php $this->options->themeUrl('assets/js/main.js'); ?>"></script>
+<script src="<?php $this->options->themeUrl('assets/js/main.js'); ?>?v=<?php echo filemtime(__DIR__ . '/assets/js/main.js'); ?>"></script>
 <?php if ('0' !== (string)$this->options->show_sw): ?>
 <script>
 if ('serviceWorker' in navigator) {

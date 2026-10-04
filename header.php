@@ -17,11 +17,11 @@
 <link rel="alternate" type="application/rss+xml" title="RSS 2.0" href="<?php $this->options->feedUrl(); ?>">
 <link rel="alternate" type="application/atom+xml" title="Atom 0.3" href="<?php $this->options->feedUrl('/atom/'); ?>">
 
-<link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/style.css'); ?>">
+<link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/style.css'); ?>?v=<?php echo filemtime(__DIR__ . '/assets/css/style.css'); ?>">
 
 <?php if ($this->is('post') || $this->is('page')): ?>
 <!-- 代码高亮 highlight.js（仅文章/独立页面加载，本地托管） -->
-<link rel="stylesheet" href="<?php $this->options->themeUrl('assets/vendor/hljs/github-dark.min.css'); ?>">
+<link rel="stylesheet" href="<?php $this->options->themeUrl('assets/vendor/hljs/github-dark.min.css'); ?>?v=<?php echo filemtime(__DIR__ . '/assets/vendor/hljs/github-dark.min.css'); ?>">
 <?php endif; ?>
 
 <?php $this->header('rss2=&rss1=&atom='); ?>
