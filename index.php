@@ -48,6 +48,7 @@ $this->need('header.php'); ?>
                     if ($this->is('index') && 1 === (int)$this->getCurrentPage()) {
                         $stickyPosts = intpStickyPosts();
                         $stickyCids = array_map('intval', array_column($stickyPosts, 'cid'));
+                        $stickyViews = intpCounterValueMap($stickyCids, 'intp_views');
                     }
                 ?>
                 <?php if ($stickyPosts): ?>
@@ -63,6 +64,10 @@ $this->need('header.php'); ?>
                             <div class="post-meta">
                                 <span class="sticky-badge">置顶</span>
                                 <time><?php echo date('Y-m-d', (int)$stickyPost['created']); ?></time>
+                                <?php if ('0' !== (string)$this->options->show_views): ?>
+                                <span>/</span>
+                                <?php intpViewsBadge($stickyViews[(int)$stickyPost['cid']]); ?>
+                                <?php endif; ?>
                             </div>
                             <h2 class="post-title"><a href="<?php echo htmlspecialchars($stickyPost['permalink'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($stickyPost['title'], ENT_QUOTES, 'UTF-8'); ?></a></h2>
                             <p class="post-summary"><?php echo htmlspecialchars($stickyPost['excerpt'], ENT_QUOTES, 'UTF-8'); ?></p>
@@ -89,6 +94,10 @@ $this->need('header.php'); ?>
                             <?php $this->category(' · '); ?>
                             <span>/</span>
                             <span><?php $this->commentsNum(_t('0 评论'), _t('1 评论'), _t('%d 评论')); ?></span>
+                            <?php if ('0' !== (string)$this->options->show_views): ?>
+                            <span>/</span>
+                            <?php intpViewsBadge(intpDisplayCount($this, 'intp_views')); ?>
+                            <?php endif; ?>
                         </div>
                         <h2 class="post-title"><a href="<?php $this->permalink(); ?>"><?php $this->title(); ?></a></h2>
                         <div class="post-content"><?php $this->content(); ?></div>
@@ -106,6 +115,10 @@ $this->need('header.php'); ?>
                                 <?php $this->category(' · '); ?>
                                 <span>/</span>
                                 <span><?php $this->commentsNum(_t('0 评论'), _t('1 评论'), _t('%d 评论')); ?></span>
+                                <?php if ('0' !== (string)$this->options->show_views): ?>
+                                <span>/</span>
+                                <?php intpViewsBadge(intpDisplayCount($this, 'intp_views')); ?>
+                                <?php endif; ?>
                             </div>
                             <h2 class="post-title"><a href="<?php $this->permalink(); ?>"><?php $this->title(); ?></a></h2>
                             <p class="post-summary"><?php $this->excerpt(120); ?></p>
@@ -127,6 +140,10 @@ $this->need('header.php'); ?>
                                 <?php $this->category(' · '); ?>
                                 <span>/</span>
                                 <span><?php $this->commentsNum(_t('0 评论'), _t('1 评论'), _t('%d 评论')); ?></span>
+                                <?php if ('0' !== (string)$this->options->show_views): ?>
+                                <span>/</span>
+                                <?php intpViewsBadge(intpDisplayCount($this, 'intp_views')); ?>
+                                <?php endif; ?>
                             </div>
                             <h2 class="post-title"><a href="<?php $this->permalink(); ?>"><?php $this->title(); ?></a></h2>
                             <p class="post-summary"><?php $this->excerpt(120); ?></p>
@@ -136,7 +153,7 @@ $this->need('header.php'); ?>
                     <?php endif; ?>
                 <?php endwhile; ?>
 
-                <?php $this->pageNav('«', '»', 3, '...', array('wrapClass' => 'pagination', 'currentClass' => 'current')); ?>
+                <?php intpPageNav($this); ?>
                 </div>
             </main>
 

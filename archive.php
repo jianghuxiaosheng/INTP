@@ -12,6 +12,7 @@ $this->need('header.php');
 /* 分类 / 标签 / 作者 / 日期归档：只遍历当前归档范围；作为独立页面时拉取全部文章 */
 $isMetaArchive = $this->is('category') || $this->is('tag') || $this->is('author') || $this->is('date');
 $years = array();
+$viewCids = array();
 
 if ($isMetaArchive) {
     while ($this->next()) {
@@ -20,7 +21,9 @@ if ($isMetaArchive) {
             'title'     => $this->title,
             'permalink' => $this->permalink,
             'created'   => $this->created,
+            'cid'       => (int)$this->cid,
         );
+        $viewCids[] = (int)$this->cid;
     }
     krsort($years);
     $archiveName = $this->getArchiveTitle();
@@ -49,12 +52,16 @@ if ($isMetaArchive) {
             'title'     => $allPosts->title,
             'permalink' => $allPosts->permalink,
             'created'   => $allPosts->created,
+            'cid'       => (int)$allPosts->cid,
         );
+        $viewCids[] = (int)$allPosts->cid;
     }
     krsort($years); /* 年份倒序 */
     $headTitle = _t('归档');
     $headDesc = _t('共 %d 篇文章，按时间倒序排列。', \Widget\Stat::alloc()->publishedPostsNum);
 }
+$viewMap = intpCounterValueMap($viewCids, 'intp_views');
+$showViews = '0' !== (string)$this->options->show_views;
 ?>
 
 <div class="page-wrap">
@@ -78,13 +85,16 @@ if ($isMetaArchive) {
                         <div class="tl-item">
                             <span class="tl-date"><?php echo date('m.d', $item['created']); ?></span>
                             <a class="tl-title" href="<?php echo $item['permalink']; ?>"><?php echo htmlspecialchars($item['title'], ENT_QUOTES, 'UTF-8'); ?></a>
+                            <?php if ($showViews): ?>
+                            <span class="tl-views"><?php intpViewsBadge($viewMap[$item['cid']]); ?></span>
+                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>
                     </div>
                 <?php endforeach; ?>
                 </div>
                 <?php if ($isMetaArchive): ?>
-                <?php $this->pageNav('«', '»', 3, '...', array('wrapClass' => 'pagination', 'currentClass' => 'current')); ?>
+                <?php intpPageNav($this); ?>
                 <?php endif; ?>
                 <?php else: ?>
                 <div class="tpl-empty">这个范围内暂时没有文章。</div>

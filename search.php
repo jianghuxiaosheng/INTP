@@ -23,13 +23,17 @@
                             <?php $this->category(' · '); ?>
                             <span>/</span>
                             <span><?php $this->commentsNum(_t('0 评论'), _t('1 评论'), _t('%d 评论')); ?></span>
+                            <?php if ('0' !== (string)$this->options->show_views): ?>
+                            <span>/</span>
+                            <?php intpViewsBadge(intpDisplayCount($this, 'intp_views')); ?>
+                            <?php endif; ?>
                         </div>
                         <h2 class="post-title"><a href="<?php $this->permalink(); ?>"><?php $this->title(); ?></a></h2>
                         <p class="post-summary"><?php $this->excerpt(120); ?></p>
                         <a class="post-more" href="<?php $this->permalink(); ?>">阅读全文 →</a>
                     </article>
                     <?php endwhile; ?>
-                    <?php $this->pageNav('«', '»', 3, '...', array('wrapClass' => 'pagination', 'currentClass' => 'current')); ?>
+                    <?php intpPageNav($this); ?>
                 <?php else: ?>
                     <p class="search-empty">没有找到与「<?php echo htmlspecialchars($this->request->s); ?>」相关的文章。</p>
                 <?php endif; ?>

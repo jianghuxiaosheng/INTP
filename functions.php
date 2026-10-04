@@ -1431,6 +1431,30 @@ function intpCountView($archive) {
     intpDisplayCount($archive, 'intp_views', intpCounterValue($cid, 'intp_views'));
 }
 
+/** 批量读取多篇文章的计数值（单条查询），返回 cid => 值 */
+function intpCounterValueMap(array $cids, $name) {
+    $cids = array_values(array_unique(array_map('intval', $cids)));
+    $map = array();
+    foreach ($cids as $cid) {
+        $map[$cid] = 0;
+    }
+    if ($cids) {
+        $db = \Typecho\Db::get();
+        $rows = $db->fetchAll($db->select('cid', 'int_value')->from('table.fields')
+            ->where('name = ?', $name)->where('cid IN ?', $cids));
+        foreach ($rows as $row) {
+            $map[(int)$row['cid']] = (int)$row['int_value'];
+        }
+    }
+    return $map;
+}
+
+/** 列表卡片 / 时间轴中的阅读量徽章（眼睛图标 + 文案），show_views 由调用处判断 */
+function intpViewsBadge($value) {
+    echo '<span class="post-views"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+        . (int)$value . ' ' . _t('阅读') . '</span>';
+}
+
 /** 点赞接口：POST 文章 permalink?intp_action=like，输出 JSON 后 exit */
 function intpHandleLike($archive) {
     $json = function ($data, $code = 200) {
@@ -1756,6 +1780,44 @@ function intpNextPage($content, $widget) {
     $nav .= '</nav>';
 
     return $pages[$current - 1] . $nav;
+}
+
+/**
+ * 列表分页：复用核心盒状分页输出，当「上一页 / 下一页」箭头与紧邻的数字页码
+ * 指向同一页时（总页数较少或处于第 2 页 / 倒数第 2 页时）省略箭头，避免重复链接。
+ */
+function intpPageNav($archive) {
+    ob_start();
+    $archive->pageNav('«', '»', 3, '...', array(
+        'wrapClass' => 'pagination',
+        'currentClass' => 'current',
+    ));
+    $html = trim((string) ob_get_clean());
+
+    if ('' === $html || !preg_match_all('#<li\b[^>]*>.*?</li>#is', $html, $m)) {
+        echo $html;
+        return;
+    }
+
+    $items = $m[0];
+    $hrefOf = function ($li) {
+        return preg_match('#<a\b[^>]*\bhref="([^"]*)"#i', $li, $h) ? $h[1] : null;
+    };
+
+    // 首箭头与第一个数字页码同页：剔除首箭头
+    if (count($items) >= 2 && preg_match('#<li\b[^>]*\bclass="prev"#i', $items[0])
+        && $hrefOf($items[0]) === $hrefOf($items[1])) {
+        array_shift($items);
+    }
+
+    // 末箭头与最后一个数字页码同页：剔除末箭头
+    $count = count($items);
+    if ($count >= 2 && preg_match('#<li\b[^>]*\bclass="next"#i', $items[$count - 1])
+        && $hrefOf($items[$count - 1]) === $hrefOf($items[$count - 2])) {
+        array_pop($items);
+    }
+
+    echo preg_replace('#(<ol\b[^>]*>).*?(</ol>)#is', '$1' . implode('', $items) . '$2', $html);
 }
 
 /* ---------- 首页置顶（自定义字段 sticky） ---------- */
