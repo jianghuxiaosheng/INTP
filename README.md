@@ -48,21 +48,11 @@
 ## 截图
 
 <details>
-<summary>点击展开更多截图</summary>
 
-![文章页](screenshots/post.png)
 
-![代码高亮](screenshots/post-code.png)
+![主题预览](screenshot.png)
 
-![归档](screenshots/archive.png)
 
-![侧边栏](screenshots/sidebar.png)
-
-![友情链接](screenshots/links.png)
-
-![站点统计](screenshots/stats.png)
-
-![移动端](screenshots/mobile.png)
 
 </details>
 
