@@ -25,9 +25,9 @@ function themeConfig($form) {
         _t('侧边栏组件'), _t('勾选需要显示在侧边栏的组件；章节目录仅在文章页出现，热门文章需同时开启下方「阅读量统计」，友情链接需先填写链接列表，自定义组件需填写 HTML 内容。'));
     $form->addInput($widgetEnabled);
 
-    $widgetOrder = new \Typecho\Widget\Helper\Form\Element\Text('side_order', NULL,
+    $widgetOrder = new IntpWidgetOrderElement('side_order', NULL,
         implode(',', array_keys($widgetRegistry)),
-        _t('组件排序'), _t('按从上到下的顺序填写组件标识，用英文逗号分隔：blog,color,recent,popular,comments,category,tags,archive,tools,links,toc,custom。未列出的组件自动排到末尾。'));
+        _t('组件排序'), _t('拖拽卡片即可调整从上到下的顺序，松手或移动后自动保存；也可聚焦后用键盘 ↑/↓ 操作。'));
     $form->addInput($widgetOrder);
 
     $sideCustom = new \Typecho\Widget\Helper\Form\Element\Textarea('side_custom', NULL, '',
@@ -187,6 +187,453 @@ function intpSidebarOrder() {
         }
     }
     return $order;
+}
+
+/**
+ * 后台「组件排序」表单项：可拖拽列表 + 键盘排序 + 自动保存
+ *
+ * 保留同名 hidden 输入，后台整体点「保存设置」时仍然兼容；拖拽 / 键盘调整后
+ * 通过 ?intp_action=side_order_save 即时写库，无需提交整个表单。
+ */
+class IntpWidgetOrderElement extends \Typecho\Widget\Helper\Form\Element
+{
+    /** 隐藏输入：保证整表提交与核心回填机制不变 */
+    public function input(?string $name = null, ?array $options = null): ?\Typecho\Widget\Helper\Layout
+    {
+        $input = new \Typecho\Widget\Helper\Layout('input');
+        $input->setAttribute('type', 'hidden');
+        $input->setAttribute('name', (string)$name);
+        $this->container($input);
+        $this->inputs[] = $input;
+        return $input;
+    }
+
+    protected function inputValue($value)
+    {
+        if (null !== $value && null !== $this->input) {
+            $this->input->setAttribute('value', (string)$value);
+        }
+    }
+
+    /** 按注册表白名单清洗排序串，去重并将缺失组件补到末尾 */
+    private function normalizeOrder(string $value, array $registryKeys): array
+    {
+        $order = array();
+        foreach (explode(',', $value) as $key) {
+            $key = trim($key);
+            if ('' !== $key && in_array($key, $registryKeys, true) && !in_array($key, $order, true)) {
+                $order[] = $key;
+            }
+        }
+        foreach ($registryKeys as $key) {
+            if (!in_array($key, $order, true)) {
+                $order[] = $key;
+            }
+        }
+        return $order;
+    }
+
+    public function render()
+    {
+        $registry = intpSidebarRegistry();
+        $registryKeys = array_keys($registry);
+        $order = $this->normalizeOrder((string)$this->value, $registryKeys);
+        $current = implode(',', $order);
+
+        $options = \Typecho\Widget::widget('Widget_Options');
+        $security = \Widget\Security::alloc();
+        $request = \Typecho\Request::getInstance();
+        $endpoint = \Typecho\Common::url('?intp_action=side_order_save', $options->index);
+        // 与核心表单一致：token 绑定当前后台 URL，保存端按 Referer 校验
+        $token = $security->getToken($request->getRequestUrl());
+
+        $h = static function ($s) {
+            return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+        };
+
+        echo '<ul class="typecho-option" id="' . $h($this->getAttribute('id')) . '">';
+        echo '<li>';
+        if (isset($this->label)) {
+            $this->label->render();
+        }
+
+        echo '<div class="intp-so" id="intp-sideorder"'
+            . ' data-endpoint="' . $h($endpoint) . '"'
+            . ' data-token="' . $h($token) . '"'
+            . ' data-default="' . $h(implode(',', $registryKeys)) . '">';
+        echo '<input type="hidden" name="' . $h($this->name) . '" id="intp-sideorder-value" value="' . $h($current) . '">';
+
+        $total = count($order);
+        echo '<ul class="intp-so-list" role="listbox" aria-label="' . $h(_t('侧边栏组件排序')) . '">';
+        $pos = 0;
+        foreach ($order as $key) {
+            $pos++;
+            $name = $registry[$key];
+            $enabled = intpSidebarEnabled($key);
+            echo '<li class="intp-so-item' . ($enabled ? '' : ' is-off') . '"'
+                . ' data-key="' . $h($key) . '" draggable="true" tabindex="0" role="option"'
+                . ' aria-grabbed="false"'
+                . ' aria-label="' . $h(sprintf(_t('%1$s，第 %2$d 项（共 %3$d 项），方向键调整顺序'), $name, $pos, $total)) . '">';
+            echo '<span class="intp-so-grip" aria-hidden="true">&#8945;</span>';
+            echo '<span class="intp-so-name">' . $h($name) . '</span>';
+            echo '<span class="intp-so-flag">' . ($enabled ? $h(_t('显示中')) : $h(_t('已隐藏'))) . '</span>';
+            echo '<span class="intp-so-btns">';
+            echo '<button type="button" class="intp-so-up" title="' . $h(_t('上移')) . '" aria-label="' . $h(sprintf(_t('将「%s」上移'), $name)) . '">&#8593;</button>';
+            echo '<button type="button" class="intp-so-down" title="' . $h(_t('下移')) . '" aria-label="' . $h(sprintf(_t('将「%s」下移'), $name)) . '">&#8595;</button>';
+            echo '</span>';
+            echo '</li>';
+        }
+        echo '</ul>';
+
+        echo '<p class="intp-so-bar">';
+        echo '<span class="intp-so-status" role="status" aria-live="polite"></span>';
+        echo '<button type="button" class="intp-so-reset">' . $h(_t('恢复默认顺序')) . '</button>';
+        echo '</p>';
+        if (isset($this->description)) {
+            $this->description->render();
+        }
+        echo '</div>';
+        echo $this->renderAssets();
+        echo '</li></ul>';
+    }
+
+    /** 输出排序 UI 的样式与交互脚本（该表单项每页只渲染一次） */
+    private function renderAssets(): string
+    {
+        ob_start();
+        ?>
+<style>
+.intp-so{max-width:520px;margin-top:6px}
+.intp-so-list{list-style:none;margin:0;padding:0;border:1px solid #d9d9d6;border-radius:6px;background:#fff;overflow:hidden}
+.intp-so-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;cursor:move;background:#fff;user-select:none;transition:background .12s,box-shadow .12s}
+.intp-so-item:last-child{border-bottom:0}
+.intp-so-item:hover{background:#f7f8fa}
+.intp-so-item:focus-visible{outline:2px solid #467b96;outline-offset:-2px}
+.intp-so-item.dragging{opacity:.5;background:#eef3f6}
+.intp-so-item.is-off .intp-so-name{color:#999}
+.intp-so-grip{color:#9aa0a6;font-size:14px;line-height:1;width:14px;text-align:center;cursor:grab}
+.intp-so-name{flex:1 1 auto;font-size:13px;color:#333}
+.intp-so-flag{font-size:11px;color:#8f98a0;border:1px solid #dde1e4;border-radius:10px;padding:1px 8px;background:#fafafa}
+.intp-so-item.is-off .intp-so-flag{color:#b26a00;border-color:#f0d9b0;background:#fdf6ec}
+.intp-so-btns{display:none;gap:4px}
+.intp-so-item:focus-within .intp-so-btns,.intp-so-item:hover .intp-so-btns{display:inline-flex}
+.intp-so-btns button,.intp-so-reset,.intp-so-retry{border:1px solid #c7cdd2;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;line-height:1.4;padding:2px 8px;color:#444}
+.intp-so-btns button:hover,.intp-so-reset:hover{background:#f0f2f4}
+.intp-so-btns button:disabled{opacity:.4;cursor:default}
+.intp-so-marker{list-style:none;height:4px;margin:0;padding:0;background:#467b96;border-radius:2px;pointer-events:none}
+.intp-so-bar{display:flex;align-items:center;gap:12px;margin:8px 0 0}
+.intp-so-status{font-size:12px;color:#666;min-height:18px}
+.intp-so-status.is-error{color:#c0392b}
+.intp-so-status.is-ok{color:#2e7d32}
+.intp-so-retry{color:#c0392b;border-color:#e0b4ae}
+@media (prefers-reduced-motion: reduce){.intp-so-item{transition:none}}
+</style>
+<script>
+(function () {
+    var root = document.getElementById('intp-sideorder');
+    if (!root) { return; }
+    var list = root.querySelector('.intp-so-list');
+    var hidden = document.getElementById('intp-sideorder-value');
+    var statusBox = root.querySelector('.intp-so-status');
+    var endpoint = root.getAttribute('data-endpoint');
+    var token = root.getAttribute('data-token');
+    var defaultOrder = (root.getAttribute('data-default') || '').split(',');
+
+    var saveTimer = null, inflight = false, resaveNeeded = false;
+
+    function announce(msg, cls) {
+        statusBox.textContent = msg || '';
+        statusBox.className = 'intp-so-status' + (cls ? ' ' + cls : '');
+    }
+
+    function syncHidden() {
+        var keys = [];
+        var items = list.children;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].classList && items[i].classList.contains('intp-so-item')) {
+                keys.push(items[i].getAttribute('data-key'));
+            }
+        }
+        hidden.value = keys.join(',');
+        refreshAria();
+    }
+
+    function refreshAria() {
+        var items = list.querySelectorAll('.intp-so-item');
+        for (var i = 0; i < items.length; i++) {
+            var name = items[i].querySelector('.intp-so-name').textContent;
+            items[i].setAttribute('aria-label', name + '，第 ' + (i + 1) + ' 项（共 ' + items.length + ' 项），方向键调整顺序');
+        }
+    }
+
+    function moveItem(li, dir) {
+        var sib = dir < 0 ? li.previousElementSibling : li.nextElementSibling;
+        while (sib && !sib.classList.contains('intp-so-item')) {
+            sib = dir < 0 ? sib.previousElementSibling : sib.nextElementSibling;
+        }
+        if (!sib) { return false; }
+        if (dir < 0) { list.insertBefore(li, sib); } else { list.insertBefore(li, sib.nextElementSibling); }
+        return true;
+    }
+
+    function afterChange(li) {
+        syncHidden();
+        scheduleSave();
+        var idx = Array.prototype.indexOf.call(list.querySelectorAll('.intp-so-item'), li) + 1;
+        announce(li.querySelector('.intp-so-name').textContent + ' <?php echo _t('已移动到第 '); ?>' + idx + ' <?php echo _t(' 位，正在保存…'); ?>');
+        li.focus();
+    }
+
+    function scheduleSave() {
+        resaveNeeded = true;
+        announce('<?php echo _t('保存中…'); ?>');
+        if (saveTimer) { clearTimeout(saveTimer); }
+        saveTimer = setTimeout(save, 300);
+    }
+
+    function save() {
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+        var value = hidden.value;
+        announce('<?php echo _t('保存中…'); ?>');
+        inflight = true;
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', endpoint, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) { return; }
+            inflight = false;
+            var ok = false;
+            try {
+                var data = JSON.parse(xhr.responseText);
+                ok = (xhr.status >= 200 && xhr.status < 300) && !!data.ok;
+            } catch (e) {}
+            if (ok) {
+                resaveNeeded = false;
+                announce('<?php echo _t('已保存'); ?>', 'is-ok');
+                setTimeout(function () {
+                    if (!resaveNeeded && statusBox.className.indexOf('is-ok') !== -1) { announce(''); }
+                }, 2000);
+            } else if (resaveNeeded) {
+                save();
+            } else {
+                showRetry();
+            }
+        };
+        xhr.send('side_order=' + encodeURIComponent(value) + '&token=' + encodeURIComponent(token));
+    }
+
+    function showRetry() {
+        statusBox.className = 'intp-so-status is-error';
+        statusBox.textContent = '';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'intp-so-retry';
+        btn.textContent = '<?php echo _t('保存失败，点击重试'); ?>';
+        btn.addEventListener('click', function () { resaveNeeded = false; save(); });
+        statusBtn(btn);
+    }
+    function statusBtn(btn) {
+        statusBox.appendChild(document.createTextNode(''));
+        statusBox.appendChild(btn);
+    }
+
+    /* ---------- 鼠标 / 触摸拖拽（HTML5 Drag & Drop） ---------- */
+    var dragEl = null, marker = null;
+
+    function ensureMarker() {
+        if (!marker) {
+            marker = document.createElement('li');
+            marker.className = 'intp-so-marker';
+            marker.setAttribute('aria-hidden', 'true');
+        }
+        return marker;
+    }
+
+    function placeMarker(e) {
+        var m = ensureMarker();
+        var items = list.querySelectorAll('.intp-so-item');
+        var placed = false;
+        for (var i = 0; i < items.length; i++) {
+            var r = items[i].getBoundingClientRect();
+            if (e.clientY < r.top + r.height / 2) {
+                list.insertBefore(m, items[i]);
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) { list.appendChild(m); }
+    }
+
+    list.addEventListener('dragstart', function (e) {
+        var li = e.target.closest ? e.target.closest('.intp-so-item') : null;
+        if (!li) { return; }
+        dragEl = li;
+        li.classList.add('dragging');
+        li.setAttribute('aria-grabbed', 'true');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', li.getAttribute('data-key'));
+    });
+    list.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        placeMarker(e);
+    });
+    list.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (!dragEl) { return; }
+        var m = ensureMarker();
+        if (m.parentNode) { list.insertBefore(dragEl, m); }
+        finishDrag();
+        syncHidden();
+        scheduleSave();
+    });
+    list.addEventListener('dragend', finishDrag);
+
+    function finishDrag() {
+        if (marker && marker.parentNode) { marker.parentNode.removeChild(marker); }
+        if (dragEl) {
+            dragEl.classList.remove('dragging');
+            dragEl.setAttribute('aria-grabbed', 'false');
+            dragEl.focus();
+        }
+        dragEl = null;
+    }
+
+    /* ---------- 按钮与键盘 ---------- */
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.intp-so-up,.intp-so-down') : null;
+        if (!btn) { return; }
+        var li = btn.parentNode.parentNode;
+        var dir = btn.className.indexOf('intp-so-up') !== -1 ? -1 : 1;
+        if (moveItem(li, dir)) { afterChange(li); }
+    });
+
+    list.addEventListener('keydown', function (e) {
+        var li = e.target;
+        if (!li.classList || !li.classList.contains('intp-so-item')) { return; }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            var dir = e.key === 'ArrowUp' ? -1 : 1;
+            if (moveItem(li, dir)) { afterChange(li); }
+        }
+    });
+
+    /* ---------- 恢复默认 ---------- */
+    root.querySelector('.intp-so-reset').addEventListener('click', function () {
+        for (var i = 0; i < defaultOrder.length; i++) {
+            var li = list.querySelector('.intp-so-item[data-key="' + defaultOrder[i] + '"]');
+            if (li) { list.appendChild(li); }
+        }
+        syncHidden();
+        announce('<?php echo _t('已恢复默认顺序，正在保存…'); ?>');
+        resaveNeeded = false;
+        save();
+    });
+
+    /* ---------- 与上方「侧边栏组件」勾选联动显示/隐藏标记 ---------- */
+    function checkboxes() { return document.querySelectorAll('input[name="side_widgets[]"]'); }
+    function syncFlags() {
+        var enabled = {};
+        var boxes = checkboxes();
+        for (var i = 0; i < boxes.length; i++) { enabled[boxes[i].value] = boxes[i].checked; }
+        var items = list.querySelectorAll('.intp-so-item');
+        for (var j = 0; j < items.length; j++) {
+            var on = !!enabled[items[j].getAttribute('data-key')];
+            items[j].classList.toggle('is-off', !on);
+            items[j].querySelector('.intp-so-flag').textContent = on ? '<?php echo _t('显示中'); ?>' : '<?php echo _t('已隐藏'); ?>';
+        }
+    }
+    var boxes = checkboxes();
+    for (var k = 0; k < boxes.length; k++) { boxes[k].addEventListener('change', syncFlags); }
+})();
+</script>
+<?php
+        return (string)ob_get_clean();
+    }
+}
+
+/**
+ * 后台侧栏组件排序保存接口
+ *
+ * POST /?intp_action=side_order_save，输出 JSON 后 exit。
+ * 三重防护：管理员 + 同源 XHR 自定义头 + Typecho Security token（与后台表单同源校验逻辑）。
+ * 读改写 options 表 theme:xxx 配置行，仅更新 side_order，不影响其他设置。
+ */
+function intpHandleSideOrderSave() {
+    $json = function ($data, $code = 200) {
+        \Typecho\Response::getInstance()->setStatus($code);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
+        exit;
+    };
+
+    if ('POST' !== ($_SERVER['REQUEST_METHOD'] ?? '')) {
+        $json(array('ok' => false, 'message' => 'method_not_allowed'), 405);
+    }
+    if ('xmlhttprequest' !== strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''))) {
+        $json(array('ok' => false, 'message' => 'bad_request'), 400);
+    }
+
+    $user = \Widget\User::alloc();
+    if (!$user->pass('administrator', true)) {
+        $json(array('ok' => false, 'message' => 'forbidden'), 403);
+    }
+
+    $request = \Typecho\Request::getInstance();
+    $security = \Widget\Security::alloc();
+    $expected = $security->getToken($request->getReferer());
+    $token = (string)($_POST['token'] ?? '');
+    if ('' === $token || !hash_equals($expected, $token)) {
+        $json(array('ok' => false, 'message' => 'bad_token'), 403);
+    }
+
+    $registryKeys = array_keys(intpSidebarRegistry());
+    $order = array();
+    foreach (explode(',', (string)($_POST['side_order'] ?? '')) as $key) {
+        $key = trim($key);
+        if ('' !== $key && in_array($key, $registryKeys, true) && !in_array($key, $order, true)) {
+            $order[] = $key;
+        }
+    }
+    foreach ($registryKeys as $key) {
+        if (!in_array($key, $order, true)) {
+            $order[] = $key;
+        }
+    }
+    $orderStr = implode(',', $order);
+
+    $options = \Typecho\Widget::widget('Widget_Options');
+    $optionName = 'theme:' . $options->theme;
+    $db = \Typecho\Db::get();
+
+    try {
+        $row = $db->fetchRow($db->select('value')->from('table.options')
+            ->where('name = ?', $optionName)->limit(1));
+        $settings = ($row && '' !== (string)$row['value'])
+            ? json_decode((string)$row['value'], true) : array();
+        if (!is_array($settings)) {
+            $settings = array();
+        }
+        $settings['side_order'] = $orderStr;
+        $encoded = json_encode($settings, JSON_UNESCAPED_UNICODE);
+
+        if ($row) {
+            $db->query($db->update('table.options')->rows(array('value' => $encoded))
+                ->where('name = ?', $optionName));
+        } else {
+            $db->query($db->insert('table.options')->rows(array(
+                'name' => $optionName,
+                'value' => $encoded,
+                'user' => 0,
+            )));
+        }
+    } catch (\Throwable $e) {
+        $json(array('ok' => false, 'message' => 'save_failed'), 500);
+    }
+
+    $json(array('ok' => true, 'side_order' => $orderStr));
 }
 
 /** 侧边栏入口：按后台开关与顺序依次渲染组件 */
@@ -1380,6 +1827,11 @@ function themeInit($archive) {
     /* 注册 JSON 接口（任意页面 ?intp_action=register POST） */
     if (isset($_GET['intp_action']) && 'register' === $_GET['intp_action']) {
         intpHandleRegister();
+    }
+
+    /* 后台侧栏组件排序保存接口（管理员，?intp_action=side_order_save POST） */
+    if (isset($_GET['intp_action']) && 'side_order_save' === $_GET['intp_action']) {
+        intpHandleSideOrderSave();
     }
 
     /* 阅读量自增（仅单篇已发布文章页） */
